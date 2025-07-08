@@ -1,20 +1,36 @@
+// src/controllers/user.controller.ts
 import { Request, Response } from 'express';
 import * as bcrypt from 'bcryptjs';
-import { User, users } from '../models/user.model';
-import { generateToken } from '../utils/jwt';
+import * as jwt from 'jsonwebtoken';
+import { supabase } from '../utils/supabase';
+export type SupabaseUser = {
+  id: number;
+  username: string;
+  email: string;
+  password: string;
+  role: string;
+  company_id: number;
+  status: string;
+};
 
-let userId = users.length + 1;
-
-// 🔐 Register
 export const register = async (req: Request, res: Response): Promise<void> => {
-  const { username, email, password, role, company } = req.body;
+  const { username, email, password, role, company_id } = req.body;
 
-  if (!username || !email || !password || !role || !company) {
+  if (typeof company_id !== 'string') {
+    res.status(400).json({ message: 'Invalid company_id format (must be UUID string)' });
+    return;
+  }
+  if (!username || !email || !password || !role || !company_id) {
     res.status(400).json({ message: 'All fields are required' });
     return;
   }
 
-  const existing = users.find(u => u.email === email);
+  const { data: existing } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email)
+    .single();
+
   if (existing) {
     res.status(400).json({ message: 'User already exists' });
     return;
@@ -22,38 +38,44 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
   const hashed = await bcrypt.hash(password, 10);
 
-  const newUser: User = {
-    id: userId++,
-    username,
-    email,
-    password: hashed,
-    role,
-    company,
-    status: 'active',
-  };
+  const { data, error } = await supabase
+    .from('users')
+    .insert([
+      {
+        username,
+        email,
+        password: hashed,
+        role,
+        company_id,
+        status: 'active',
+      },
+    ])
+    .select();
 
-  users.push(newUser);
+  if (error || !data || data.length === 0) {
+    console.error('Supabase error:', error); 
+    res.status(500).json({ message: error?.message || 'Failed to create user' });
+    return;
+  }
 
-  res.status(201).json({
-    message: 'User registered',
-    user: {
-      id: newUser.id,
-      username: newUser.username,
-      email: newUser.email,
-      role: newUser.role,
-      company: newUser.company,
-      status: newUser.status,
-    },
-    token: generateToken(newUser.id),
+  const token = jwt.sign({ id: data[0].id }, process.env.JWT_SECRET!, {
+    expiresIn: '7d',
   });
+
+  res.status(201).json({ message: 'User registered', user: data[0], token });
 };
 
-// 🔐 Login
 export const login = async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body;
-  const user = users.find(u => u.email === email && u.status === 'active');
 
-  if (!user) {
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('email', email)
+    .eq('status', 'active')
+    .single();
+
+  if (error || !user) {
     res.status(400).json({ message: 'Invalid credentials' });
     return;
   }
@@ -64,134 +86,32 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  res.json({
-    message: 'Login successful',
-    user: {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      company: user.company,
-    },
-    token: generateToken(user.id),
+  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET!, {
+    expiresIn: '7d',
   });
+
+  res.json({ message: 'Login successful', user, token });
 };
 
-// 🔍 Get All Users (filtered)
-export const getUsers = (req: Request, res: Response): void => {
+export const getUsers = async (req: Request, res: Response): Promise<void> => {
   const currentUser = (req as any).user;
 
-  let result: User[];
+  let query = supabase
+    .from('users')
+    .select('id, username, email, role, status, company_id');
 
-  if (currentUser.company === 'Bitnusa' && currentUser.role === 'superadmin') {
-    result = users;
-  } else {
-    result = users.filter(
-      u => u.status === 'active' && (u.id === currentUser.id || u.company === currentUser.company)
-    );
+  if (!(currentUser.role === 'superadmin' && currentUser.company === 'Bitnusa')) {
+    query = query
+      .eq('company_id', currentUser.company_id)
+      .eq('status', 'active');
   }
 
-  res.json(result.map(u => ({
-    id: u.id,
-    username: u.username,
-    email: u.email,
-    role: u.role,
-    company: u.company,
-    status: u.status,
-  })));
-};
+  const { data, error } = await query;
 
-// 🔍 Get One User by ID
-export const getUserById = (req: Request, res: Response): void => {
-  const id = Number(req.params.id);
-  const user = users.find(u => u.id === id);
-
-  if (!user) {
-    res.status(404).json({ message: 'User not found' });
+  if (error || !data) {
+    res.status(500).json({ message: error?.message || 'Failed to fetch users' });
     return;
   }
 
-  res.json({
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    role: user.role,
-    company: user.company,
-    status: user.status,
-  });
-};
-
-// ➕ Admin/Superadmin Create User
-export const createUserByAdmin = async (req: Request, res: Response): Promise<void> => {
-  const { username, email, password, role, company } = req.body;
-  const currentUser = (req as any).user;
-
-  if (!username || !email || !password || !role || !company) {
-    res.status(400).json({ message: 'All fields required' });
-    return;
-  }
-
-  if (currentUser.role !== 'superadmin' && company !== currentUser.company) {
-    res.status(403).json({ message: 'Cannot create user in another company' });
-    return;
-  }
-
-  const exists = users.find(u => u.email === email);
-  if (exists) {
-    res.status(400).json({ message: 'User already exists' });
-    return;
-  }
-
-  const hashed = await bcrypt.hash(password, 10);
-
-  const newUser: User = {
-    id: userId++,
-    username,
-    email,
-    password: hashed,
-    role,
-    company,
-    status: 'active',
-  };
-
-  users.push(newUser);
-  res.status(201).json({ message: 'User created', user: newUser });
-};
-
-// ✏️ Update User
-export const updateUser = async (req: Request, res: Response): Promise<void> => {
-  const id = Number(req.params.id);
-  const { username, password, role } = req.body;
-  const user = users.find(u => u.id === id);
-
-  if (!user) {
-    res.status(404).json({ message: 'User not found' });
-    return;
-  }
-
-  if (username) user.username = username;
-  if (password) user.password = await bcrypt.hash(password, 10);
-  if (role) user.role = role;
-
-  res.json({ message: 'User updated', user });
-};
-
-// ❌ Soft Delete User
-export const deleteUser = (req: Request, res: Response): void => {
-  const id = Number(req.params.id);
-  const currentUser = (req as any).user;
-
-  const user = users.find(u => u.id === id);
-  if (!user) {
-    res.status(404).json({ message: 'User not found' });
-    return;
-  }
-
-  if (currentUser.role !== 'superadmin' && user.company !== currentUser.company) {
-    res.status(403).json({ message: 'Forbidden' });
-    return;
-  }
-
-  user.status = 'inactive';
-  res.json({ message: 'User set to inactive', user });
+  res.json(data);
 };

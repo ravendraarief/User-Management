@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as jwt from 'jsonwebtoken';
-import { users } from '../models/user.model';
+import { supabase } from '../utils/supabase';
 
 export const protect = async (
   req: Request,
@@ -17,8 +17,13 @@ export const protect = async (
 
   try {
     const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
-    const user = users.find(u => u.id === decoded.id);
-    if (!user) {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', decoded.id)
+      .single();
+
+    if (error || !user) {
       res.status(401).json({ message: 'User not found' });
       return;
     }

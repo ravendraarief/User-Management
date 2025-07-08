@@ -6,7 +6,9 @@
       "outDir": "./dist",
       "strict": true,
       "resolveJsonModule": true,
-    "esModuleInterop": true
+      "moduleResolution": "node",
+      "esModuleInterop": true,
+      "forceConsistentCasingInFileNames": true
     },
     "include": ["src", "tests"]
   }

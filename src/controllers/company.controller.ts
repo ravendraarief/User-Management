@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
-import { companies, Company } from '../models/company.model';
+import { supabase } from '../utils/supabase';
 
-let companyId = companies.length + 1;
-
-export const addCompany = (req: Request, res: Response): void => {
+// ➕ Superadmin Add Company
+export const addCompany = async (req: Request, res: Response): Promise<void> => {
   const { name } = req.body;
 
   if (!name) {
@@ -11,14 +10,46 @@ export const addCompany = (req: Request, res: Response): void => {
     return;
   }
 
-  const exists = companies.find(c => c.name === name);
-  if (exists) {
+  // Cek jika sudah ada
+  const { data: existing } = await supabase
+    .from('companies')
+    .select('id')
+    .eq('name', name)
+    .single();
+
+  if (existing) {
     res.status(400).json({ message: 'Company already exists' });
     return;
   }
 
-  const newCompany: Company = { id: companyId++, name };
-  companies.push(newCompany);
+  // Tambah company
+  const { data, error } = await supabase.from('companies').insert([{ name }]).select();
 
-  res.status(201).json({ message: 'Company created', company: newCompany });
+  if (error) {
+    res.status(500).json({ message: error.message });
+    return;
+  }
+
+  res.status(201).json({ message: 'Company created', company: data![0] });
+};
+
+// 🔍 Get Companies (Superadmin: semua, Admin: hanya miliknya)
+export const getCompanies = async (req: Request, res: Response): Promise<void> => {
+  const currentUser = (req as any).user;
+
+  let query = supabase.from('companies').select('id, name');
+
+  // Jika bukan superadmin, hanya bisa lihat company miliknya
+  if (currentUser.role !== 'superadmin') {
+    query = query.eq('id', currentUser.company_id);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    res.status(500).json({ message: error.message });
+    return;
+  }
+
+  res.json(data);
 };
