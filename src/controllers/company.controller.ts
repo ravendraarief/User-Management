@@ -40,7 +40,7 @@ export const getCompanies = async (req: Request, res: Response): Promise<void> =
   let query = supabase.from('companies').select('id, name');
 
   // Jika bukan superadmin, hanya bisa lihat company miliknya
-  if (currentUser.role !== 'superadmin') {
+  if (currentUser.role !== 'superadmin' && currentUser.company?.name === 'Bitnusa') {
     query = query.eq('id', currentUser.company_id);
   }
 
