@@ -1,5 +1,6 @@
 import express from 'express';
 import * as swaggerUi from 'swagger-ui-express';
+import cors from 'cors';
 
 import swaggerDocument from '../swagger.json';
 import * as dotenv from 'dotenv';
@@ -12,6 +13,7 @@ import companyRoutes from './routes/company.routes';
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 app.use('/api/users', userRoutes); // ✅ PASANG ROUTER, bukan HANDLER
 app.use('/api/companies', companyRoutes);
