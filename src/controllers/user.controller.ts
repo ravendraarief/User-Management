@@ -206,3 +206,39 @@ export const updateUser = async (req: Request, res: Response) => {
 
   res.json({ message: 'User updated successfully' });
 };
+
+export const deactivateUser = async (req: Request, res: Response): Promise<void> => {
+  const userId = req.params.id;
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ status: 'inactive' })
+    .eq('id', userId)
+    .select()
+    .single();
+
+  if (error) {
+    res.status(500).json({ message: 'Failed to deactivate user', error: error.message });
+    return;
+  }
+
+  res.json({ message: 'User deactivated successfully', user: data });
+};
+
+export const activateUser = async (req: Request, res: Response): Promise<void> => {
+  const userId = req.params.id;
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ status: 'active' })
+    .eq('id', userId)
+    .select()
+    .single();
+
+  if (error) {
+    res.status(500).json({ message: 'Failed to activate user', error: error.message });
+    return;
+  }
+
+  res.json({ message: 'User activated successfully', user: data });
+};
