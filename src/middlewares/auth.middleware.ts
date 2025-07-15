@@ -8,6 +8,7 @@ export const protect = async (
   next: NextFunction
 ): Promise<void> => {
   const authHeader = req.headers.authorization;
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -17,20 +18,43 @@ export const protect = async (
 
   try {
     const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
-    const { data: user, error } = await supabase
+
+    // Ambil user dari Supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('*')
       .eq('id', decoded.id)
       .single();
 
-    if (error || !user) {
+    if (userError || !user) {
       res.status(401).json({ message: 'User not found' });
       return;
     }
 
-    (req as any).user = user;
+    // Ambil company dari Supabase
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('id, name')
+      .eq('id', user.company_id)
+      .single();
+
+    if (companyError || !company) {
+      res.status(401).json({ message: 'Company not found' });
+      return;
+    }
+
+    // Simpan user dan company di request object
+    (req as any).user = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      company_id: user.company_id,
+      company,
+    };
+
     next();
-  } catch {
+  } catch (err) {
     res.status(401).json({ message: 'Invalid token' });
   }
 };
