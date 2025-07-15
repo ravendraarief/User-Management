@@ -20,16 +20,29 @@ export const protect = async (
     const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
 
     // Ambil user dari Supabase
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', decoded.id)
-      .single();
-
-    if (userError || !user) {
-      res.status(401).json({ message: 'User not found' });
-      return;
-    }
+    const { data: user, error } = await supabase
+    .from('users')
+    .select('id, username, email, role, company_id, company:companies(id, name)')
+    .eq('id', decoded.id)
+    .single();
+  
+  if (error || !user) {
+    res.status(401).json({ message: 'User not found' });
+    return;
+  }
+  
+  (req as any).user = {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    company_id: user.company_id,
+    company: user.company,
+  };
+  
+  next();
+  
+    
 
     // Ambil company dari Supabase
     const { data: company, error: companyError } = await supabase
