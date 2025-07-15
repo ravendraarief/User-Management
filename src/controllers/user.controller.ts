@@ -122,7 +122,7 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
     .from('users')
     .select('id, username, email, role, status, company_id');
 
-  if (!(currentUser.role === 'superadmin' && currentUser.company === 'Bitnusa')) {
+  if (!(currentUser.role === 'superadmin' && currentUser.company?.name === 'Bitnusa')) {
     query = query
       .eq('company_id', currentUser.company_id)
       .eq('status', 'active');
