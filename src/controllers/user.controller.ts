@@ -86,11 +86,33 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  // Ambil data perusahaan
+  const { data: company, error: companyError } = await supabase
+    .from('companies')
+    .select('id, name')
+    .eq('id', user.company_id)
+    .single();
+
+  if (companyError || !company) {
+    res.status(500).json({ message: 'Company not found' });
+    return;
+  }
+
   const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET!, {
     expiresIn: '7d',
   });
 
-  res.json({ message: 'Login successful', user, token });
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      company_id: user.company_id,
+      company,
+    },
+  });
 };
 
 export const getUsers = async (req: Request, res: Response): Promise<void> => {
