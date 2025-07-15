@@ -7,7 +7,10 @@ export const isSuperAdmin = async (
 ): Promise<void> => {
   const user = (req as any).user;
 
-  if (user?.role === 'superadmin' && user?.role === 'admin' && user?.company?.name === 'Bitnusa') {
+  if (
+    (user?.role === 'superadmin' && user?.company?.name === 'Bitnusa') ||
+    user?.role === 'admin'
+  ) {
     return next();
   }
 
