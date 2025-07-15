@@ -137,3 +137,72 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
 
   res.json(data);
 };
+
+export const createUser = async (req: Request, res: Response) => {
+  const { username, email, password, role, company_id, status } = req.body;
+
+  if (!username || !email || !password || !role || !company_id) {
+    res.status(400).json({ message: 'All fields are required' });
+    return;
+  }
+
+  const { data: existing } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email)
+    .single();
+
+  if (existing) {
+    res.status(400).json({ message: 'Email already exists' });
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const { error } = await supabase.from('users').insert([
+    {
+      username,
+      email,
+      password: hashedPassword,
+      role,
+      company_id,
+      status: status || 'active',
+    },
+  ]);
+
+  if (error) {
+    res.status(500).json({ message: 'Failed to create user', error });
+    return;
+  }
+
+  res.status(201).json({ message: 'User created successfully' });
+};
+
+export const updateUser = async (req: Request, res: Response) => {
+  const userId = req.params.id;
+  const { username, email, password, role, company_id, status } = req.body;
+
+  const updates: any = {
+    ...(username && { username }),
+    ...(email && { email }),
+    ...(role && { role }),
+    ...(company_id && { company_id }),
+    ...(status && { status }),
+  };
+
+  if (password) {
+    updates.password = await bcrypt.hash(password, 10);
+  }
+
+  const { error } = await supabase
+    .from('users')
+    .update(updates)
+    .eq('id', userId);
+
+  if (error) {
+    res.status(500).json({ message: 'Failed to update user', error });
+    return;
+  }
+
+  res.json({ message: 'User updated successfully' });
+};
